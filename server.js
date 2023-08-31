@@ -1,44 +1,32 @@
-const mongoose = require("mongoose")
-const Document = require("./Document")
+const express = require("express")
+
 require('dotenv').config()
 
-const db_username = process.env.DB_USERNAME
-const db_pw = process.env.DB_PW
-const db_cluster = process.env.DB_CLUSTER
+const loginRouter = require("./routes/login")
+const registerRouter = require("./routes/register")
+const auth = require("./auth")
 
-mongoose.connect(`mongodb+srv://${db_username}:${db_pw}@${db_cluster}.mongodb.net/`)
-    .then(()=>console.log("Connected to database!"))
+// ENV VARIABLES
+const PORT = process.env.PORT || 3001
 
-const defaultValue = ""
+const app = express()
+app.use(express.json())
+app.use("/login", loginRouter)
+app.use("/register", registerRouter)
 
-const io = require('socket.io')(3001, {
-    cors: {
-        origin: 'http://localhost:3000',
-        methods: ['GET', 'POST']
-    }
+const httpServer = app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`)
+});
+
+app.get('/', (req,res) => {
+    res.json({message: "Hello world"})
 })
 
-io.on("connection", socket => {
-    socket.on('get-document', async documentId => {
-        const document = await findOrCreateDocument(documentId)
-        socket.join(documentId)
-        socket.emit('load-document', document.data)
-
-        socket.on('send-changes', delta => {
-            socket.broadcast.to(documentId).emit("receive-changes", delta)
-        })
-
-        socket.on("save-document", async data => {
-            await Document.findByIdAndUpdate(documentId, { data })
-        })
-    })
+app.get('/auth-endpoint', auth, (req, res) => {
+    res.json({message: "Authorized"})
 })
 
-async function findOrCreateDocument(id) {
-    if (id === null) return
-
-    const document = await Document.findById(id)
-    if (document) return document
-    return await Document.create({ _id: id, data: defaultValue })
-
-}
+// connect to database
+const dbConnect = require("./db/dbConnect");
+const io = require("./socket")(httpServer)
+dbConnect()
